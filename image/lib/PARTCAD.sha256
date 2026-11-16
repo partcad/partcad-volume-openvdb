@@ -1,4 +1,4 @@
-# Copied from partcad/partcad at b0730248b77e575a40f4ed419b172f8148b78672, src/partcad/builtin/import/.
+# Copied from partcad/partcad at 3e71d235a614f6cd654fee547f0ed65d55be8bb8, src/partcad/builtin/import/.
 # Written by image/sync-partcad.sh: do not edit by hand.
-e3aa2ead3df8bf7b160025514fe7ca6460785c1932e602853bea46d1c97570b9  part_voxels.py
-8db289db4b45ccc361adf4c07416a539c2a95781fe449ced24c08d6284468d8d  voxel_solid.py
+3b1f161becc570a95183c19ef6543d95daca00c8222df729a3e2ad5b7201f021  part_voxels.py
+d913ff99adb6e6ffa4afb78c7451c8c2a3ffd64f09222020ab06e91a7764c3f1  voxel_solid.py

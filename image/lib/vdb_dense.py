@@ -32,7 +32,9 @@ Labels coarsened that way are no longer labels, and are read as occupancy.
 
 Plain numpy and the bindings, for any Python they are built for; both the
 'openvdb' (OpenVDB 12 on) and the 'pyopenvdb' module names, and both the
-spellings of a grid's class those two have.
+spellings of a grid's class those two have. A file's grids are listed with
+'readAllGridMetadata', which reads none of their voxels, and the one wanted
+read with 'read'.
 """
 
 import json
@@ -58,6 +60,11 @@ def bindings():
         except ImportError:
             raise ValueError("this Python has no OpenVDB bindings (neither 'openvdb' nor 'pyopenvdb')")
     return openvdb
+
+
+def said(error):
+    """What an exception says, on one line: the bindings' messages run over several."""
+    return " ".join(str(error).split()) or type(error).__name__
 
 
 def grid_class(grid):
@@ -134,14 +141,16 @@ def convert(path, options, openvdb=None):
 
     openvdb = openvdb or bindings()
     try:
-        grids = openvdb.readGridMetadata(path)
+        # Every grid's metadata, and none of their voxels. ('readGridMetadata'
+        # is one grid's, by name.)
+        grids = openvdb.readAllGridMetadata(path)
     except Exception as e:
-        raise ValueError("OpenVDB cannot read it: %s" % e)
+        raise ValueError("OpenVDB cannot read it: %s" % said(e))
     name = choose(list(grids), options.get("grid"))
     try:
         grid = openvdb.read(path, name)
     except Exception as e:
-        raise ValueError("OpenVDB cannot read its grid '%s': %s" % (name, e))
+        raise ValueError("OpenVDB cannot read its grid '%s': %s" % (name, said(e)))
     kind = grid_class(grid)
     typed = value_type(grid)
     threshold = options.get("threshold")
@@ -220,7 +229,7 @@ def main(arguments):
     try:
         found = convert(path, options)
     except ValueError as e:
-        sys.stderr.write("%s\n" % e)
+        sys.stderr.write("%s\n" % said(e))
         return 2
     numpy.savez(out, **found)
     return 0

@@ -5,8 +5,9 @@
 #
 """A stand-in for OpenVDB's Python bindings, for the tests that run where they are not.
 
-Only what 'vdb_dense' calls, and only as OpenVDB documents it: 'readGridMetadata'
-and 'read'; a grid's 'name', 'gridClass', 'valueTypeName', 'background',
+Only what 'vdb_dense' calls, and only as OpenVDB documents it:
+'readAllGridMetadata' (every grid of a file, without its voxels),
+'readGridMetadata' (one, by name) and 'read'; a grid's 'name', 'gridClass', 'valueTypeName', 'background',
 'evalActiveVoxelBoundingBox' (the inclusive index bounds of the voxels whose
 value is not the background), 'copyToArray' (the values of a box of voxels
 from a corner, the background where nothing is stored) and 'transform'
@@ -101,9 +102,16 @@ def _load(path):
     return found, names
 
 
-def readGridMetadata(path):
+def readAllGridMetadata(path):
     found, names = _load(path)
     return [Grid(name, json.loads(str(found["described:" + name]))) for name in names]
+
+
+def readGridMetadata(path, name):
+    found, names = _load(path)
+    if name not in names:
+        raise KeyError("no grid named %s" % name)
+    return Grid(name, json.loads(str(found["described:" + name])))
 
 
 def read(path, name):
