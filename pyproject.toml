@@ -1,0 +1,25 @@
+# Not a Python distribution: a PartCAD package, whose script PartCAD runs in
+# the image under image/. This holds the configuration of the tools that check
+# it, the same as PartCAD's own (github.com/partcad/partcad, pyproject.toml).
+
+[tool.black]
+line-length = 120
+target-version = ["py310"]
+# Copied from PartCAD and checked against it by digest: formatted there.
+force-exclude = "image/lib/(part_voxels|voxel_solid)\\.py"
+
+[tool.isort]
+profile = "black"
+line_length = 120
+known_third_party = ["vdb_volume", "vdb_dense", "part_voxels", "voxel_solid", "ocp_serialize", "openvdb"]
+extend_skip_glob = ["image/lib/part_voxels.py", "image/lib/voxel_solid.py"]
+
+# Read by flake8 through the Flake8-pyproject plugin.
+[tool.flake8]
+max-line-length = 120
+extend-ignore = "E203,E501"
+extend-exclude = ".venv,image/lib/part_voxels.py,image/lib/voxel_solid.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"

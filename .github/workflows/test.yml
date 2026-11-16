@@ -1,0 +1,175 @@
+# The reader, the image it runs in, and the image's publication.
+#
+# * pytest -- the reader against a stand-in for OpenVDB's bindings
+#   (tests/fake/openvdb.py), on the runner: what it makes of a grid.
+# * image -- the image built, every test run inside it with the real OpenVDB
+#   (tests/test_live.py writes its volumes with OpenVDB itself, so nothing is
+#   downloaded), and a part built by PartCAD in it, as a user's PartCAD builds
+#   one.
+# * publish -- on 'main' only, once the others pass: the image for amd64 and
+#   arm64 under the tag VERSION names, unless that tag exists already. A tag is
+#   never rebuilt, since a part is cached against it: a change to the image is
+#   published by bumping VERSION, and the 'version' job says so on a pull
+#   request that forgets.
+#
+# Nightly as well, because both halves move without this repository: PartCAD's
+# devel (whose wrapper runs the script, and whose copies are in image/lib), and
+# conda-forge.
+name: Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  IMAGE: ghcr.io/partcad/partcad-volume-openvdb
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # The image's.
+          python-version: "3.12"
+      - name: Install
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          # OCP as the image has it, and PartCAD's wrappers (for
+          # 'ocp_serialize'), which need nothing else of PartCAD's.
+          python -m pip install pytest "build123d==0.11.1" "cadquery-ocp-novtk==7.9.3.1.1"
+          python -m pip install --no-deps "partcad @ git+https://github.com/partcad/partcad@devel"
+      - run: python -m pytest -v
+
+  lint:
+    name: black, isort, flake8
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install "black==26.5.1" "isort==8.0.1" "flake8==7.3.0" "Flake8-pyproject==1.2.4"
+      - run: black --check --diff .
+      - run: isort --check --diff .
+      - run: flake8 .
+
+  version:
+    # A change to what goes into the image is a new image, and so a new tag.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: The image changed, so VERSION did
+        run: |
+          set -e
+          base="${{ github.event.pull_request.base.sha }}"
+          changed=$(git diff --name-only "$base" HEAD)
+          if echo "$changed" | grep -q '^image/' && ! echo "$changed" | grep -qx 'VERSION'; then
+            echo "::error file=VERSION::image/ changed and VERSION did not: a published tag is never rebuilt, so this change would never reach anyone. Bump VERSION, and the tag partcad.yaml names."
+            exit 1
+          fi
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        run: |
+          set -e
+          # Tagged as partcad.yaml names it, so that the PartCAD below finds it
+          # here and does not pull the published one.
+          echo "TAG=${IMAGE}:$(cat VERSION)" >> "$GITHUB_ENV"
+          docker buildx build --load --tag "${IMAGE}:$(cat VERSION)" image
+          docker image ls "${IMAGE}"
+      - name: The tests, in the image
+        run: |
+          docker run --rm --user root -v "$PWD:/src" -w /src \
+            -e PYTHONDONTWRITEBYTECODE=1 -e PIP_ROOT_USER_ACTION=ignore "$TAG" sh -ec '
+              pip install --no-cache-dir pytest
+              pip install --no-cache-dir --no-deps "partcad @ git+https://github.com/partcad/partcad@devel"
+              python3 -m pytest -v -p no:cacheprovider'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: A part, built by PartCAD in the image
+        run: |
+          set -e
+          python -m pip install "partcad @ git+https://github.com/partcad/partcad@devel"
+          # A package of its own that depends on this one, with a volume
+          # OpenVDB writes: a sphere 0.5 m in radius. Under the runner's home,
+          # which PartCAD mounts into the container.
+          e2e="$RUNNER_TEMP/e2e"
+          mkdir -p "$e2e"
+          chmod 777 "$e2e"
+          docker run --rm -v "$e2e:/out" "$TAG" /opt/openvdb/bin/python -I -c "
+          import openvdb
+          make = getattr(openvdb, 'createLevelSetSphere', None) or openvdb.FloatGrid.createLevelSetSphere
+          grid = make(0.5, center=(0.0, 0.0, 0.0), voxelSize=0.02, halfWidth=3.0)
+          grid.name = 'surface'
+          openvdb.write('/out/sphere.vdb', grids=[grid])"
+          cat > "$e2e/partcad.yaml" <<EOF
+          dependencies:
+            openvdb:
+              type: local
+              path: $GITHUB_WORKSPACE
+          parts:
+            sphere:
+              type: openvdb:vdb
+              path: sphere.vdb
+          EOF
+          cd "$e2e"
+          # Exits non-zero when the part fails to build.
+          pc --no-ansi info :sphere
+          pc --no-ansi daemon stop || true
+
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'schedule' && github.event_name != 'pull_request'
+    needs: [pytest, lint, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Is this version published?
+        id: published
+        run: |
+          tag="${IMAGE}:$(cat VERSION)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if docker manifest inspect "$tag" > /dev/null 2>&1; then
+            echo "::notice::$tag is published already, and is not rebuilt: bump VERSION to publish a change"
+            echo "done=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/setup-qemu-action@v3
+        if: steps.published.outputs.done != 'true'
+      - uses: docker/setup-buildx-action@v3
+        if: steps.published.outputs.done != 'true'
+      - uses: docker/build-push-action@v6
+        if: steps.published.outputs.done != 'true'
+        with:
+          context: image
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.published.outputs.tag }}

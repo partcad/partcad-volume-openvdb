@@ -1,0 +1,26 @@
+partcad-volume-openvdb
+======================
+
+This PartCAD package reads OpenVDB volumes and makes them PartCAD parts.
+
+The code in this repository (the part type, the reader in image/lib, the image
+recipe, the configuration and the tests) is:
+
+    Copyright 2026 PartCAD
+    Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+image/lib/part_voxels.py and image/lib/voxel_solid.py are copies of PartCAD's
+own (https://github.com/partcad/partcad, src/partcad/builtin/import/), under
+the same license; image/lib/PARTCAD.sha256 says which commit they were copied
+from.
+
+The image this repository builds (ghcr.io/partcad/partcad-volume-openvdb)
+carries software under licenses of its own, which apply to it there:
+
+  * OpenVDB (https://www.openvdb.org), Apache 2.0, a project of the Academy
+    Software Foundation, and the libraries it is built with, as conda-forge
+    distributes them (https://conda-forge.org);
+  * OpenCASCADE Technology, through the cadquery-ocp-novtk and build123d
+    wheels, LGPL 2.1 with the OCCT exception, and Apache 2.0;
+  * PartCAD's base image (ghcr.io/partcad/partcad-container-python) and what it
+    carries.

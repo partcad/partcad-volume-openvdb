@@ -1,0 +1,28 @@
+# OpenVDB volumes for PartCAD.
+#
+# The type runs in the image below, which carries OpenVDB (conda-forge's build)
+# and the code that reads with it: a machine needs a container runtime, and
+# nothing else, to build these parts. See README.md.
+desc: OpenVDB volumes - level sets, fog volumes, occupancy and labels - made the solids their voxels fill.
+url: https://github.com/partcad/partcad-volume-openvdb
+partcad: ">=0.10.24"
+
+partTypes:
+  vdb:
+    desc: |
+      An OpenVDB volume (`.vdb`) as the exact solid its voxels fill, a solid
+      per label: a level set filled inside its surface (Houdini, Blender, a
+      slicer's remesher), a fog volume or any grid of numbers filled at
+      `threshold` (a simulation's density, a scan), a grid of booleans where
+      true, and a grid of integers by its labels. `grid` names which of the
+      file's grids; the voxels are its transform's size in `unit` (metres),
+      unless `size` says otherwise; a grid larger than `maxVoxels` (256 cubed)
+      is coarsened. Everything PartCAD's `voxels` type takes besides.
+    path: vdb.py
+    extension: vdb
+    requireSolid: true
+    container:
+      # Pinned: a part is cached against this tag. VERSION says which one
+      # this repository builds, and a test holds the two together.
+      image: ghcr.io/partcad/partcad-volume-openvdb:0.1.0
+      name: openvdb
